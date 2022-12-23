@@ -21,6 +21,8 @@ if(CMAKE_EXPORT_COMPILE_COMMANDS)
 endif()
 
 add_executable(sandboxed_executable main.c)
+target_link_libraries(sandboxed_executable cap)
+
 #add_subdirectory(thirdparty)
 #add_subdirectory(src-lib)
 #add_subdirectory(src-exe)

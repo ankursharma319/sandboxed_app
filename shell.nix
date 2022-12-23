@@ -8,6 +8,7 @@ pkgs.mkShell {
     buildInputs = if pkgs.stdenv.isDarwin then [] else [pkgs.valgrind] ++ [
         pkgs.gdb
         pkgs.clang_13
+		pkgs.libcap
 	]; 
 }
 
