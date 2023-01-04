@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <errno.h>
+#include <sched.h>
 
 // for network interface
 #include <arpa/inet.h>
@@ -17,6 +18,7 @@
 #include <unistd.h>
 #include <linux/if_link.h>
 
+void print_all(void);
 void print_ids(void);
 void print_root_dirs(void);
 void print_capabilities(void);
@@ -24,18 +26,26 @@ char* file_entry_type_to_str(unsigned char type);
 void print_pids(void);
 void print_network_interfaces(void);
 
+void setup_sandbox(void);
+
 int main(void) {
 	printf("%s\n", "Running application");
+	print_all();
+	setup_sandbox();
+	print_all();
+	return 0;
+}
+
+void print_all(void) {
 	print_ids();
 	print_root_dirs();
 	print_capabilities();
 	print_pids();
 	print_network_interfaces();
-	return 0;
 }
 
 void print_ids(void) {
-	printf("\n============== IDs ===============\n");
+	printf("%s", "\n============== IDs ===============\n");
 	uid_t my_ruid = getuid();
 	uid_t my_euid = geteuid();
 	uid_t my_rgid = getgid();
@@ -76,7 +86,7 @@ char* file_entry_type_to_str(unsigned char type) {
 }
 
 void print_root_dirs(void) {
-	printf("\n============== Root dir (/) ===============\n");
+	printf("%s", "\n============== Root dir (/) ===============\n");
 	errno = 0;
 	DIR* root_dir = opendir("/");
 	if (!root_dir) {
@@ -97,7 +107,7 @@ void print_root_dirs(void) {
 }
 
 void print_capabilities(void) {
-	printf("\n============== Capabilities ===============\n");
+	printf("%s", "\n============== Capabilities ===============\n");
 	cap_t ret = cap_get_proc();
 	if (ret == NULL) {
 		printf("%s\n", "Error while getting capabilities");
@@ -115,7 +125,7 @@ void print_capabilities(void) {
 }
 
 void print_pids(void) {
-	printf("\n============== All PIDs ===============\n");
+	printf("%s", "\n============== All PIDs ===============\n");
 	errno = 0;
 	DIR* root_dir = opendir("/proc/");
 	if (!root_dir) {
@@ -136,7 +146,7 @@ void print_pids(void) {
 }
 
 void print_network_interfaces(void) {
-	printf("\n============== Network Interfaces ===============\n");
+	printf("%s", "\n============== Network Interfaces ===============\n");
 	struct ifaddrs *ifaddr;
 	int family, s;
 	char host[NI_MAXHOST];
@@ -195,5 +205,10 @@ void print_network_interfaces(void) {
 	}
 
 	freeifaddrs(ifaddr);
+}
+
+void setup_sandbox(void) {
+	printf("%s", "\n============== SETTING UP SANDBOX ===============\n");
+	unshare(CLONE_NEWUSER);
 }
 
