@@ -21,6 +21,7 @@ if(CMAKE_EXPORT_COMPILE_COMMANDS)
 endif()
 
 add_executable(sandboxed_executable main.c)
+target_sources(sandboxed_executable PRIVATE utils.c sandbox.c)
 target_link_libraries(sandboxed_executable cap)
 
 #add_subdirectory(thirdparty)

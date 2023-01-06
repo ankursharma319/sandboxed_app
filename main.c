@@ -1,40 +1,32 @@
 
-#define _GNU_SOURCE     /* To get defns of NI_MAXSERV and NI_MAXHOST */
-
-#include <sys/capability.h>
-#include <sys/types.h>
-#include <dirent.h>
-#include <unistd.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <errno.h>
-#include <sched.h>
-#include <sys/time.h>
+#include <sys/capability.h>
+#include <dirent.h>
+#include <unistd.h>
 #include <sys/resource.h>
-#include <sys/prctl.h>
 
 // for network interface
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <netdb.h>
 #include <ifaddrs.h>
-#include <stdlib.h>
-#include <unistd.h>
 #include <linux/if_link.h>
 
-void write_to_file(char const * const filename, char const * const text);
+#include "utils.h"
+#include "sandbox.h"
 
 void print_all(void);
 void print_ids(void);
 void print_root_dirs(void);
 void print_capabilities(void);
-char* file_entry_type_to_str(unsigned char type);
 void print_pids(void);
 void print_network_interfaces(void);
 void print_nice_values(void);
 
 void raise_capabilities(void);
 void raise_nice(void);
-void setup_sandbox(void);
 
 int main(void) {
 	printf("%s\n", "Running application");
@@ -69,31 +61,6 @@ void print_ids(void) {
 	printf("Effective gid = %u\n", my_egid);
 	printf("Process Id (PID) = %d\n", my_pid);
 	printf("Parent Process Id (PPID) = %d\n", my_ppid);
-}
-
-char* file_entry_type_to_str(unsigned char type) {
-	if (type == DT_BLK) {
-		return "block";
-	}
-	if (type == DT_CHR) {
-		return "char";
-	}
-	if (type == DT_DIR) {
-		return "dir";
-	}
-	if (type == DT_FIFO) {
-		return "fifo";
-	}
-	if (type == DT_LNK) {
-		return "link";
-	}
-	if (type == DT_REG) {
-		return "file";
-	}
-	if (type == DT_SOCK) {
-		return "socket";
-	}
-	return "unknown";
 }
 
 void print_root_dirs(void) {
@@ -300,48 +267,5 @@ void raise_nice(void) {
 		perror("The following error occurred");
 		exit(EXIT_FAILURE);
 	}
-}
-
-void write_to_file(char const * const filename, char const * const text) {
-	FILE* fp = fopen(filename, "w");
-	if(!fp) {
-		printf("Error while opening %s\n", filename);
-		perror("The following error occurred");
-        exit(EXIT_FAILURE);
-    }
-	int ret = fprintf(fp, "%s", text);
-	if(ret <= 0) {
-		printf("Error while writing to %s\n", filename);
-		perror("The following error occurred");
-        exit(EXIT_FAILURE);
-	}
-	fclose(fp);
-}
-
-void setup_sandbox(void) {
-	printf("%s", "\n============== SETTING UP SANDBOX ===============\n");
-	// needed this to get permission to write to /proc/self/uid_map
-	// https://stackoverflow.com/questions/47296408/
-	prctl(PR_SET_DUMPABLE, 1, 0, 0, 0);
-
-	// setup uid and gid mapping so that the uid inside user namespace is 1
-	uid_t my_euid = geteuid();
-	uid_t my_egid = getegid();
-	if (0 != unshare(CLONE_NEWUSER)) {
-		printf("%s\n", "Error while unsharing into new user namespace");
-		perror("The following error occurred");
-		exit(EXIT_FAILURE);
-	}
-	char buffer[16];
-
-	sprintf(buffer, "%u %u %u", 0, my_euid, 1);
-	write_to_file("/proc/self/uid_map", buffer);
-
-	// need to do this in order to be able to write to gid_map
-	write_to_file("/proc/self/setgroups", "deny");
-
-	sprintf(buffer, "%u %u %u", 0, my_egid, 1);
-	write_to_file("/proc/self/gid_map", buffer);
-
 }
 
