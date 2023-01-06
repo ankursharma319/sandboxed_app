@@ -65,24 +65,7 @@ void print_ids(void) {
 
 void print_root_dirs(void) {
 	printf("%s", "\n============== Root dir (/) ===============\n");
-	errno = 0;
-	DIR* root_dir = opendir("/");
-	if (!root_dir) {
-		printf("%s\n", "Error while opening root dir");
-		perror("The following error occurred");
-		exit(EXIT_FAILURE);
-	}
-
-	errno = 0;
-	struct dirent * entry; 
-	while ((entry = readdir(root_dir)) != NULL) {
-		printf("  %s (%s)\n", entry->d_name, file_entry_type_to_str(entry->d_type));
-	}
-	if (errno != 0) {
-		printf("%s\n", "Error while reading root dir");
-		perror("The following error occurred");
-	}
-	closedir(root_dir);
+	print_dir("/");
 }
 
 void raise_capabilities(void) {
@@ -155,24 +138,7 @@ void print_capabilities(void) {
 
 void print_pids(void) {
 	printf("%s", "\n============== All PIDs ===============\n");
-	errno = 0;
-	DIR* root_dir = opendir("/proc/");
-	if (!root_dir) {
-		printf("%s\n", "Error while opening proc dir");
-		perror("The following error occurred");
-		exit(EXIT_FAILURE);
-	}
-
-	errno = 0;
-	struct dirent * entry; 
-	while ((entry = readdir(root_dir)) != NULL) {
-		printf("  %s (%s)\n", entry->d_name, file_entry_type_to_str(entry->d_type));
-	}
-	if (errno != 0) {
-		printf("%s\n", "Error while reading proc dir");
-		perror("The following error occurred");
-	}
-	closedir(root_dir);
+	print_dir("/proc");
 }
 
 void print_network_interfaces(void) {

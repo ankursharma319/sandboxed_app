@@ -1,8 +1,12 @@
 #include "utils.h"
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <dirent.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <sys/types.h>
 
 char* file_entry_type_to_str(unsigned char type) {
 	if (type == DT_BLK) {
@@ -43,5 +47,40 @@ void write_to_file(char const * const filename, char const * const text) {
         exit(EXIT_FAILURE);
 	}
 	fclose(fp);
+}
+
+bool dir_exists(char const * const dirname) {
+	return access(dirname, F_OK) >= 0;
+}
+
+void create_dir_if_not_exists(char const * const dirname) {
+	if (!dir_exists(dirname)) {
+		if (mkdir(dirname, 0777) < 0) {
+			printf("Error while creating dir %s\n", dirname);
+			perror("The following error occurred");
+			exit(EXIT_FAILURE);
+		}
+	}
+}
+
+void print_dir(char const* const dirname) {
+	errno = 0;
+	DIR* root_dir = opendir(dirname);
+	if (!root_dir) {
+		printf("Error while opening dir %s\n", dirname);
+		perror("The following error occurred");
+		exit(EXIT_FAILURE);
+	}
+
+	errno = 0;
+	struct dirent * entry; 
+	while ((entry = readdir(root_dir)) != NULL) {
+		printf("  %s (%s)\n", entry->d_name, file_entry_type_to_str(entry->d_type));
+	}
+	if (errno != 0) {
+		printf("Error while reading dir %s\n", dirname);
+		perror("The following error occurred");
+	}
+	closedir(root_dir);
 }
 
