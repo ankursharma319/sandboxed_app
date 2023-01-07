@@ -140,9 +140,9 @@ void setup_mounts(void) {
 	// could use chroot here- but cant join any further user namespaces if use that
 	// this allows further namespaces, so use this
 
-	char old_root[] = "/tmp/sandbox_tmp/my_old_root";
-	create_dir_if_not_exists(old_root);
-	ret = syscall(SYS_pivot_root, tmp_dir, old_root);
+	char oldroot[] = "/tmp/sandbox_tmp/oldroot";
+	create_dir_if_not_exists(oldroot);
+	ret = syscall(SYS_pivot_root, tmp_dir, oldroot);
 
 	ret = chdir("/");
 	if (ret != 0) {
@@ -152,18 +152,18 @@ void setup_mounts(void) {
 	}
 
 	// if dont do this unmount
-	// then /my_old_root will give the sandboxed app access to the outside world
+	// then /oldroot will give the sandboxed app access to the outside world
 
-	// char old_root_2[] = "/my_old_root";
-	// ret = umount2(old_root_2, MNT_DETACH);
+	// char oldroot_2[] = "/oldroot";
+	// ret = umount2(oldroot_2, MNT_DETACH);
 	// if (ret != 0) {
-	// 	printf("Error while unmounting %s\n", old_root_2);
+	// 	printf("Error while unmounting %s\n", oldroot_2);
 	// 	perror("The following error occurred");
 	// 	exit(EXIT_FAILURE);
 	// }
-	// ret = rmdir(old_root_2);
+	// ret = rmdir(oldroot_2);
 	// if (ret != 0) {
-	// 	printf("%s\n", "Error while rmdirring old_root");
+	// 	printf("%s\n", "Error while rmdirring oldroot");
 	// 	perror("The following error occurred");
 	// 	exit(EXIT_FAILURE);
 	// }

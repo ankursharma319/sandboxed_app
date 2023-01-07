@@ -27,6 +27,7 @@ void print_nice_values(void);
 
 void raise_capabilities(void);
 void raise_nice(void);
+void edit_files(void);
 
 int main(void) {
 	printf("%s\n", "Running application");
@@ -35,6 +36,7 @@ int main(void) {
 	print_all();
 	setup_sandbox();
 	print_all();
+	edit_files();
 	return 0;
 }
 
@@ -237,5 +239,23 @@ void raise_nice(void) {
 		perror("The following error occurred");
 		exit(EXIT_FAILURE);
 	}
+}
+
+void edit_files(void) {
+	printf("%s", "\n============== /oldroot ===============\n");
+	print_dir("/oldroot");
+	printf("%s", "\n============== /my_play_dir ===============\n");
+	print_dir("/my_play_dir");
+	char buffer[32];
+	get_current_time_str(buffer, sizeof(buffer));
+	// printf("got time_str %s\n", buffer);
+	write_to_file("/my_play_dir/my_file.txt", buffer); 
+	write_to_file("/oldroot/tmp/my_file.txt", buffer); 
+	write_to_file("/my_file.txt", buffer);
+	print_file_contents("/my_play_dir/my_file.txt");
+	print_file_contents("/oldroot/tmp/my_file.txt");
+	print_file_contents("/my_file.txt");
+	// outside the process, will see /tmp/my_file.txt and /tmp/my_play_dir/my_file.txt
+	// but not /tmp/sandbox_tmp/my_file.txt
 }
 

@@ -2,12 +2,15 @@
 
 #include <ctype.h>
 #include <errno.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <dirent.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <time.h>
+#include <assert.h>
 
 char* file_entry_type_to_str(unsigned char type) {
 	if (type == DT_BLK) {
@@ -124,5 +127,21 @@ void print_dir_nums(char const* const dirname) {
 		perror("The following error occurred");
 	}
 	closedir(root_dir);
+}
+
+void get_current_time_str(char * const string, size_t max_size) {
+	time_t t = time(NULL);
+	struct tm *tm = localtime(&t);
+	if (!tm) {
+		printf("Error calling localtime\n");
+		perror("The following error occurred");
+		exit(EXIT_FAILURE);
+	}
+	size_t ret = strftime(string, max_size, "%c", tm);
+	if (!ret) {
+		printf("Error calling strftime\n");
+		perror("The following error occurred");
+		exit(EXIT_FAILURE);
+	}
 }
 
