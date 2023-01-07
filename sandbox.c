@@ -11,10 +11,12 @@
 #include <sys/mount.h>
 #include <sys/syscall.h>
 #include <sys/wait.h>
+#include <seccomp.h>
 
 #define PLAY_DIR "/home/ubuntu/src/sandboxed_app/play_dir"
 
 void setup_mounts(void);
+void setup_seccomp(void);
 
 void setup_sandbox(void) {
 	printf("%s", "\n============== SETTING UP SANDBOX ===============\n");
@@ -26,8 +28,9 @@ void setup_sandbox(void) {
 	// setup uid and gid mapping so that the uid inside user namespace is 1
 	uid_t my_euid = geteuid();
 	uid_t my_egid = getegid();
+	printf("%s\n", "Entering into new user+mount+pid namespace");
 	if (0 != unshare(CLONE_NEWUSER | CLONE_NEWNS | CLONE_NEWPID)) {
-		printf("%s\n", "Error while unsharing into new user+mount namespace");
+		printf("%s\n", "Error while unsharing into new user+mount+pid namespace");
 		perror("The following error occurred");
 		exit(EXIT_FAILURE);
 	}
@@ -61,9 +64,7 @@ void setup_sandbox(void) {
 	}
 	if (res_pid == 0) {
 		// child process
-		puts("Inside child process\n");
-		printf("%s\n", "printing dir /");
-		print_dir("/");
+		puts("Inside child process");
 		create_dir_if_not_exists("/proc");
 		int ret = mount("proc", "/proc", "proc", 0, NULL);
 		if (ret != 0) {
@@ -71,16 +72,26 @@ void setup_sandbox(void) {
 			perror("The following error occurred");
 			exit(EXIT_FAILURE);
 		}
+		// the reason for moving the child process only to new network namespace
+		// is that it can allow us access to the sandbox net ns in the child process
+		// and allow access to the root net ns in the parent process and allow to
+		// setup bridge between them or iptables magic
+		if (0 != unshare(CLONE_NEWNET)) {
+			printf("%s\n", "Error while unsharing into new network namespace");
+			perror("The following error occurred");
+			exit(EXIT_FAILURE);
+		}
+		setup_seccomp();
 	} else {
 		// parent process
-		puts("Inside parent process\n");
+		puts("Inside parent process");
 		int status = -1;
 		waitpid(res_pid, &status, 0);
-		puts("Exiting parent process\n");
+		puts("Exiting parent process");
 		if (WIFEXITED(status)) {
 			exit(WEXITSTATUS(status));
 		} else {
-			puts("Child process didnt exit normally\n");
+			puts("Child process didnt exit normally");
 			exit(EXIT_FAILURE);
 		}
 	}
@@ -145,7 +156,23 @@ void setup_mounts(void) {
 	// 	perror("The following error occurred");
 	// 	exit(EXIT_FAILURE);
 	// }
-	
 
+}
+
+void setup_seccomp(void) {
+	printf("%s\n", "Setting up seccomp");
+	scmp_filter_ctx ctx = seccomp_init(SCMP_ACT_KILL);
+	if (ctx == NULL) {
+		printf("%s\n", "Error in seccomp_init");
+		perror("The following error occurred");
+		exit(EXIT_FAILURE);
+	}
+	set_seccomp_arch(SCMP_ARCH_X86_64);
+	int ret = seccomp_load(ctx);
+	if (ret != 0) {
+		printf("Error code %d while seccomp_load\n", ret);
+		exit(EXIT_FAILURE);
+	}
+	seccomp_release(ctx);
 }
 

@@ -9,6 +9,7 @@ pkgs.mkShell {
         pkgs.gdb
         pkgs.clang_13
 		pkgs.libcap
+		pkgs.libseccomp
 	]; 
 }
 

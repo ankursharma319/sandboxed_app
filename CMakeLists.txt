@@ -22,7 +22,7 @@ endif()
 
 add_executable(sandboxed_executable main.c)
 target_sources(sandboxed_executable PRIVATE utils.c sandbox.c)
-target_link_libraries(sandboxed_executable cap)
+target_link_libraries(sandboxed_executable cap seccomp)
 
 #add_subdirectory(thirdparty)
 #add_subdirectory(src-lib)
