@@ -138,7 +138,7 @@ void print_capabilities(void) {
 
 void print_pids(void) {
 	printf("%s", "\n============== All PIDs ===============\n");
-	print_dir("/proc");
+	print_dir_nums("/proc");
 }
 
 void print_network_interfaces(void) {
@@ -220,13 +220,17 @@ void print_nice_values(void) {
 void raise_nice(void) {
 	// example of something which needs CAP_SYS_NICE or root privilige
 	// should fail outside of sandbox because we dont have the capability
+	// and should fail inside the sandbox because this is a global resource,
+	// does not fall under any namespace belonging to user namespace in sandbox
 	printf("%s\n", "Raising nice (priority) values");
+	errno = 0;
 	int process_prio = getpriority(PRIO_PROCESS, 0);
 	if (errno != 0) {
-		printf("%s\n", "Error while retrieving process priority value");
+		printf("%s, process_prio = %d\n", "Error while retrieving process priority value", process_prio);
 		perror("The following error occurred");
 		exit(EXIT_FAILURE);
 	}
+	errno = 0;
 	int ret = setpriority(PRIO_PROCESS, 0, process_prio-1);
 	if (ret != 0) {
 		printf("%s\n", "Error while setting process priority value");
