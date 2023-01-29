@@ -13,7 +13,7 @@
 #include <sys/wait.h>
 #include <seccomp.h>
 
-#define PLAY_DIR "/tmp/sandbox_play_dir"
+#define PLAY_DIR_OUTSIDE_SANDBOX "/tmp/sandbox_play_dir"
 
 void setup_namespaces(void);
 void setup_mounts(void);
@@ -77,7 +77,11 @@ void setup_sandbox(void) {
 }
 
 void setup_namespaces(void) {
-	create_dir_if_not_exists(PLAY_DIR);
+	// play_dir is a special dir which we plan to make available
+	// inside the sandbox, as a demonstration that it is possible
+	// to be flexible with exactly what is shared and kept private
+	// thanks to mount setup_namespaces
+	create_dir_if_not_exists(PLAY_DIR_OUTSIDE_SANDBOX);
 	// needed this to get permission to write to /proc/self/uid_map
 	// https://stackoverflow.com/questions/47296408/
 	prctl(PR_SET_DUMPABLE, 1, 0, 0, 0);
@@ -117,20 +121,26 @@ void setup_mounts(void) {
 		exit(EXIT_FAILURE);
 	}
 
+	// /tmp/sandbox_tmp outside will be root i.e. / inside sandbox
 	char tmp_dir[] = "/tmp/sandbox_tmp";
 	create_dir_if_not_exists(tmp_dir);
-	// whatever was in /tmp is still there
+	// whatever was in /tmp/sandbox_tmp/ from before is still there
 	// but have mounted a new tmpfs on top of it
+	// so whatever was in there from before will 
+	// not be visible to sandbox anylonger
 	ret = mount("tmpfs", tmp_dir, "tmpfs", 0, NULL);
 	if (ret != 0) {
 		printf("%s\n", "Error while creating tmp_dir mount");
 		perror("The following error occurred");
 		exit(EXIT_FAILURE);
 	}
-	// if want to share dir from outside into sandbox
+	// if want to share a dir from outside into sandbox
+	// /tmp/sandbox_tmp will become root / later so in order to make
+	// the play dir accessible inside the sandbox as /my_play_dir
+	// we create it in /tmp/sandbox_tmp/
 	char common_dir[] = "/tmp/sandbox_tmp/my_play_dir";
 	create_dir_if_not_exists(common_dir);
-	ret = mount(PLAY_DIR, common_dir, NULL, MS_BIND | MS_REC, NULL);
+	ret = mount(PLAY_DIR_OUTSIDE_SANDBOX, common_dir, NULL, MS_BIND | MS_REC, NULL);
 	if (ret != 0) {
 		printf("Error while creating mount for %s\n", common_dir);
 		perror("The following error occurred");
@@ -139,7 +149,6 @@ void setup_mounts(void) {
 
 	// could use chroot here- but cant join any further user namespaces if use that
 	// this allows further namespaces, so use this
-
 	char oldroot[] = "/tmp/sandbox_tmp/oldroot";
 	create_dir_if_not_exists(oldroot);
 	ret = syscall(SYS_pivot_root, tmp_dir, oldroot);

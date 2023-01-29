@@ -23,16 +23,12 @@ void print_root_dirs(void);
 void print_capabilities(void);
 void print_pids(void);
 void print_network_interfaces(void);
-void print_nice_values(void);
 
 void raise_capabilities(void);
-void raise_nice(void);
 void edit_files(void);
 
 int main(void) {
 	printf("%s\n", "Running application");
-	raise_capabilities();
-	// raise_nice();
 	print_all();
 	setup_sandbox();
 	print_all();
@@ -46,7 +42,6 @@ void print_all(void) {
 	print_capabilities();
 	print_pids();
 	print_network_interfaces();
-	print_nice_values();
 }
 
 void print_ids(void) {
@@ -74,6 +69,7 @@ void raise_capabilities(void) {
 	// Raising some capabilities in the effective set
 	// Needs to be already present in the permitted set
 	// which can be done using the setcap(8) cmd on the executable
+	// e.g. sudo setcap all=p ./_build/release/sandboxed_executable
 
 	printf("%s", "Raising some capabilities\n");
 
@@ -205,42 +201,6 @@ void print_network_interfaces(void) {
 	freeifaddrs(ifaddr);
 }
 
-void print_nice_values(void) {
-	printf("%s", "\n============== Nice (Priority) values ===============\n");
-	errno = 0;
-	int process_prio = getpriority(PRIO_PROCESS, 0);
-	int user_prio = getpriority(PRIO_USER, 0);
-	if (errno != 0) {
-		printf("%s\n", "Error while retrieving process priority value");
-		perror("The following error occurred");
-		exit(EXIT_FAILURE);
-	}
-	printf("Process priority = %d\n", process_prio);
-	printf("User priority = %d\n", user_prio);
-}
-
-void raise_nice(void) {
-	// example of something which needs CAP_SYS_NICE or root privilige
-	// should fail outside of sandbox because we dont have the capability
-	// and should fail inside the sandbox because this is a global resource,
-	// does not fall under any namespace belonging to user namespace in sandbox
-	printf("%s\n", "Raising nice (priority) values");
-	errno = 0;
-	int process_prio = getpriority(PRIO_PROCESS, 0);
-	if (errno != 0) {
-		printf("%s, process_prio = %d\n", "Error while retrieving process priority value", process_prio);
-		perror("The following error occurred");
-		exit(EXIT_FAILURE);
-	}
-	errno = 0;
-	int ret = setpriority(PRIO_PROCESS, 0, process_prio-1);
-	if (ret != 0) {
-		printf("%s\n", "Error while setting process priority value");
-		perror("The following error occurred");
-		exit(EXIT_FAILURE);
-	}
-}
-
 void edit_files(void) {
 	printf("%s", "\n============== /oldroot ===============\n");
 	print_dir("/oldroot");
@@ -257,5 +217,6 @@ void edit_files(void) {
 	print_file_contents("/my_file.txt");
 	// outside the process, will see /tmp/my_file.txt and /tmp/my_play_dir/my_file.txt
 	// but not /tmp/sandbox_tmp/my_file.txt
+	// confirm that manually
 }
 
