@@ -3,6 +3,8 @@
 
 #define _GNU_SOURCE
 
+#include <string.h>
+#include <fcntl.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -18,15 +20,28 @@
 void setup_namespaces(void);
 void setup_mounts(void);
 void setup_seccomp(void);
+void setup_cgroup(void);
+void print_current_cgroup(void);
+void fork_into_new_child_proc(void);
+void mount_proc(void);
+void setup_network_namespace(void);
+
 void allow(scmp_filter_ctx ctx, int syscall);
 
 void setup_sandbox(void) {
 	printf("%s", "\n============== SETTING UP SANDBOX ===============\n");
+	setup_cgroup();
 	setup_namespaces();
+	setup_mounts();
+    fork_into_new_child_proc();
+    // rest of the code runs in the child with pid 1
+    mount_proc();
+    setup_network_namespace();
+    setup_seccomp();
+}
 
-	// mount /proc
-	// make sure that we are in a new pid namespace bcoz
-	// the root pid namespace already has /proc mounted
+void fork_into_new_child_proc(void) {
+	printf("Forking into new child with pid 1\n");
 	// need to move the current process into the new pid namespace manually
 	// unshare creates the pid namespace without automatically moving current
 	// process into that namespaces
@@ -42,26 +57,10 @@ void setup_sandbox(void) {
 	if (res_pid == 0) {
 		// child process
 		puts("Inside child process");
-		create_dir_if_not_exists("/proc");
-		int ret = mount("proc", "/proc", "proc", 0, NULL);
-		if (ret != 0) {
-			printf("%s\n", "Error while creating /proc mount");
-			perror("The following error occurred");
-			exit(EXIT_FAILURE);
-		}
-		// the reason for moving the child process only to new network namespace
-		// is that it can allow us access to the sandbox net ns in the child process
-		// and allow access to the root net ns in the parent process and allow to
-		// setup bridge between them or iptables magic
-		if (0 != unshare(CLONE_NEWNET)) {
-			printf("%s\n", "Error while unsharing into new network namespace");
-			perror("The following error occurred");
-			exit(EXIT_FAILURE);
-		}
-		setup_seccomp();
+		return;
 	} else {
 		// parent process
-		puts("Inside parent process");
+		puts("Inside parent process, waiting for child to finish up");
 		int status = -1;
 		waitpid(res_pid, &status, 0);
 		puts("Exiting parent process");
@@ -72,11 +71,108 @@ void setup_sandbox(void) {
 			exit(EXIT_FAILURE);
 		}
 	}
+}
 
+void mount_proc(void) {
+	// mount /proc
+	// make sure that we are in a new pid namespace while running 
+    // this func bcoz the root pid namespace already has /proc mounted
+	printf("Mounting /proc\n");
+    create_dir_if_not_exists("/proc");
+    int ret = mount("proc", "/proc", "proc", 0, NULL);
+    if (ret != 0) {
+        printf("%s\n", "Error while creating /proc mount");
+        perror("The following error occurred");
+        exit(EXIT_FAILURE);
+    }
+}
 
+void setup_network_namespace(void) {
+	printf("%s", "\n============== Network Namespace ===============\n");
+	printf("Setting up network namespace\n");
+    // the reason for moving the child process only to new network namespace
+    // is that it can (in theory) allow us access to the sandbox net ns in the child process
+    // and allow access to the root net ns in the parent process and allow to
+    // setup bridge between them or iptables magic
+    if (0 != unshare(CLONE_NEWNET)) {
+        printf("%s\n", "Error while unsharing into new network namespace");
+        perror("The following error occurred");
+        exit(EXIT_FAILURE);
+    }
+}
+
+void print_current_cgroup(void) {
+	pid_t my_pid = getpid();
+	char* buffer1;
+	if (0 > asprintf(&buffer1, "/proc/%u/cgroup", my_pid)) {
+		puts("Error producing formatted string");
+		perror("The following error occurred");
+		exit(EXIT_FAILURE);
+	}
+	char * cg = get_file_contents(buffer1);
+	printf("Current cgroup = %s\n", cg);
+	free(cg);
+	free(buffer1);
+}
+
+void setup_cgroup(void) {
+	printf("%s", "\n============== Cgroup ===============\n");
+	print_current_cgroup();
+	printf("%s\n", "Setting up cgroup");
+	char* sandbox_cgroup_dir = getenv("SANDBOX_CGROUP_DIR");
+	printf("Sandbox cgroup dir = %s\n", sandbox_cgroup_dir);
+
+	char* controllers_fname;
+	if (0 > asprintf(&controllers_fname, "%s/cgroup.controllers", sandbox_cgroup_dir)) {
+		puts("Error producing formatted string");
+		perror("The following error occurred");
+		exit(EXIT_FAILURE);
+	}
+	print_file_contents(controllers_fname);
+
+    char* subtree_control_fname;
+	if (0 > asprintf(&subtree_control_fname, "%s/cgroup.subtree_control", sandbox_cgroup_dir)) {
+		puts("Error producing formatted string");
+		perror("The following error occurred");
+		exit(EXIT_FAILURE);
+	}
+	print_file_contents(subtree_control_fname);
+
+    char* memory_max_fname;
+	if (0 > asprintf(&memory_max_fname, "%s/memory.max", sandbox_cgroup_dir)) {
+		puts("Error producing formatted string");
+		perror("The following error occurred");
+		exit(EXIT_FAILURE);
+	}
+	write_to_file(memory_max_fname, "12000000");
+	print_file_contents(memory_max_fname);
+
+    char* cgroup_procs_fname;
+	if (0 > asprintf(&cgroup_procs_fname, "%s/cgroup.procs", sandbox_cgroup_dir)) {
+		puts("Error producing formatted string");
+		perror("The following error occurred");
+		exit(EXIT_FAILURE);
+	}
+	pid_t my_pid = getpid();
+	char* pid_str;
+	if (0 > asprintf(&pid_str, "%u", my_pid)) {
+		puts("Error producing formatted string");
+		perror("The following error occurred");
+		exit(EXIT_FAILURE);
+	}
+	printf("Writing %s to %s\n", pid_str, cgroup_procs_fname);
+	write_to_file(cgroup_procs_fname, pid_str);
+	print_file_contents(cgroup_procs_fname);
+	print_current_cgroup();
+
+    free(controllers_fname);
+    free(subtree_control_fname);
+	free(cgroup_procs_fname);
+	free(pid_str);
 }
 
 void setup_namespaces(void) {
+	printf("%s", "\n============== Namespaces ===============\n");
 	// play_dir is a special dir which we plan to make available
 	// inside the sandbox, as a demonstration that it is possible
 	// to be flexible with exactly what is shared and kept private
@@ -108,11 +204,10 @@ void setup_namespaces(void) {
 	printf("writing following to gid_map : %s\n", buffer);
 	write_to_file("/proc/self/gid_map", buffer);
 	print_file_contents("/proc/self/gid_map");
-	
-	setup_mounts();
 }
 
 void setup_mounts(void) {
+	printf("%s", "\n============== Mounts ===============\n");
 	//make your mount points private so that outside world cant see them
 	int ret = mount(NULL, "/", NULL, MS_PRIVATE | MS_REC , NULL);
 	if (ret != 0) {
@@ -128,6 +223,7 @@ void setup_mounts(void) {
 	// but have mounted a new tmpfs on top of it
 	// so whatever was in there from before will 
 	// not be visible to sandbox anylonger
+	printf("Mounting new tmpfs on %s\n", tmp_dir);
 	ret = mount("tmpfs", tmp_dir, "tmpfs", 0, NULL);
 	if (ret != 0) {
 		printf("%s\n", "Error while creating tmp_dir mount");
@@ -140,6 +236,7 @@ void setup_mounts(void) {
 	// we create it in /tmp/sandbox_tmp/
 	char common_dir[] = "/tmp/sandbox_tmp/my_play_dir";
 	create_dir_if_not_exists(common_dir);
+	printf("Creating a bind mount from %s to %s\n", PLAY_DIR_OUTSIDE_SANDBOX, common_dir);
 	ret = mount(PLAY_DIR_OUTSIDE_SANDBOX, common_dir, NULL, MS_BIND | MS_REC, NULL);
 	if (ret != 0) {
 		printf("Error while creating mount for %s\n", common_dir);
@@ -150,6 +247,7 @@ void setup_mounts(void) {
 	// could use chroot here- but cant join any further user namespaces if use that
 	// this allows further namespaces, so use this
 	char oldroot[] = "/tmp/sandbox_tmp/oldroot";
+	printf("Chrooting to %s, old root available at %s\n", tmp_dir, "/oldroot");
 	create_dir_if_not_exists(oldroot);
 	ret = syscall(SYS_pivot_root, tmp_dir, oldroot);
 
@@ -212,6 +310,7 @@ void allow_time_functions(scmp_filter_ctx ctx)
 {
     allow(ctx, SCMP_SYS(clock_gettime));
     allow(ctx, SCMP_SYS(gettimeofday));
+    allow(ctx, SCMP_SYS(clock_nanosleep));
 }
 
 void allow_fd_access(scmp_filter_ctx ctx)
@@ -271,6 +370,7 @@ void allow_networking_related(scmp_filter_ctx ctx) {
 }
 
 void setup_seccomp(void) {
+	printf("%s", "\n============== Seccomp ===============\n");
 	printf("%s\n", "Setting up seccomp");
 	scmp_filter_ctx ctx = seccomp_init(SCMP_ACT_KILL);
 	if (ctx == NULL) {

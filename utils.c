@@ -1,11 +1,12 @@
 #include "utils.h"
 
+#define _GNU_SOURCE
 #include <ctype.h>
 #include <errno.h>
 #include <stddef.h>
+#include <dirent.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <dirent.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -53,6 +54,24 @@ void write_to_file(char const * const filename, char const * const text) {
 	fclose(fp);
 }
 
+char* get_file_contents(const char *const filename) {
+	FILE* fp = fopen(filename, "r");
+	if(!fp) {
+		printf("Error while opening %s\n", filename);
+		perror("The following error occurred");
+        exit(EXIT_FAILURE);
+    }
+	// just guessing 1024 is enough
+	char *string = calloc(1024, 1);
+	int ret = fread(string, sizeof(char), 1024, fp);
+	if (ret < 1 && ferror(fp)) {
+		perror("Error reading file: ");
+		exit(EXIT_FAILURE);
+	}
+	fclose(fp);
+	return string;
+}
+
 void print_file_contents(char const * const filename) {
 	FILE* fp = fopen(filename, "r");
 	if(!fp) {
@@ -98,6 +117,40 @@ void print_dir(char const* const dirname) {
 	struct dirent * entry; 
 	while ((entry = readdir(root_dir)) != NULL) {
 		printf("  %s (%s)\n", entry->d_name, file_entry_type_to_str(entry->d_type));
+	}
+	if (errno != 0) {
+		printf("Error while reading dir %s\n", dirname);
+		perror("The following error occurred");
+	}
+	closedir(root_dir);
+}
+
+void print_dir_with_ownership_info(char const* const dirname) {
+	errno = 0;
+	DIR* root_dir = opendir(dirname);
+	if (!root_dir) {
+		printf("Error while opening dir %s\n", dirname);
+		perror("The following error occurred");
+		exit(EXIT_FAILURE);
+	}
+
+	errno = 0;
+	struct dirent * entry;
+	while ((entry = readdir(root_dir)) != NULL) {
+		printf("  %s (%s)\n", entry->d_name, file_entry_type_to_str(entry->d_type));
+		char* fullname;
+		if (0 > asprintf(&fullname, "%s/%s", dirname, entry->d_name)) {
+			puts("Error producing formatted string");
+			perror("The following error occurred");
+			exit(EXIT_FAILURE);
+		}
+		struct stat sb;
+		if (stat(fullname, &sb) == -1) {
+        	perror("stat");
+        	exit(EXIT_FAILURE);
+    	}
+		printf("Ownership: UID=%ld GID=%ld\n", (long) sb.st_uid, (long) sb.st_gid);
+		free(fullname);
 	}
 	if (errno != 0) {
 		printf("Error while reading dir %s\n", dirname);

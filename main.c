@@ -1,4 +1,5 @@
 
+#include <stddef.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <errno.h>
@@ -6,6 +7,7 @@
 #include <dirent.h>
 #include <unistd.h>
 #include <sys/resource.h>
+#include <string.h>
 
 // for network interface
 #include <arpa/inet.h>
@@ -25,14 +27,24 @@ void print_pids(void);
 void print_network_interfaces(void);
 
 void raise_capabilities(void);
+void drop_capabilities(void);
 void edit_files(void);
+void allocate_large_mem(void);
 
 int main(void) {
 	printf("%s\n", "Running application");
+	// need to run as root in order to move process from
+	// root owned cgroup to a new cgroup
+	// but only need to access to write to cgroup dir owned
+	// by root and should not need any other capabilities
+	drop_capabilities();
 	print_all();
+	allocate_large_mem();
 	setup_sandbox();
 	print_all();
 	edit_files();
+	printf("\nThe following should fail because of cgroup memory limit\n");
+	allocate_large_mem();
 	return 0;
 }
 
@@ -63,6 +75,33 @@ void print_ids(void) {
 void print_root_dirs(void) {
 	printf("%s", "\n============== Root dir (/) ===============\n");
 	print_dir("/");
+}
+
+void drop_capabilities(void) {
+	printf("%s", "Dropping all capabilities\n");
+
+	// need setfcap to create directory
+	// need dac_override to be able to write to files not owned by us, specifically cgroup.procs
+	// cap_t caps = cap_from_text("= all+eip");
+	cap_t caps = cap_from_text("= cap_dac_override,cap_setfcap+eip");
+	if (caps == NULL) {
+		/* handle error */;
+		printf("%s\n", "Error while getting capabilities");
+		perror("The following error occurred");
+		exit(EXIT_FAILURE);
+	}
+
+	if (cap_set_proc(caps) == -1) {
+		/* handle error */;
+		printf("%s\n", "Error while setting capabilities");
+		perror("The following error occurred");
+		exit(EXIT_FAILURE);
+	}
+	if (cap_free(caps) == -1) {
+		printf("%s\n", "Error while freeing capabilities mem");
+		perror("The following error occurred");
+		exit(EXIT_FAILURE);
+	}
 }
 
 void raise_capabilities(void) {
@@ -206,6 +245,7 @@ void edit_files(void) {
 	print_dir("/oldroot");
 	printf("%s", "\n============== /my_play_dir ===============\n");
 	print_dir("/my_play_dir");
+	printf("%s", "\n============== Writing current timestamp to files ===============\n");
 	char buffer[32];
 	get_current_time_str(buffer, sizeof(buffer));
 	// printf("got time_str %s\n", buffer);
@@ -218,5 +258,39 @@ void edit_files(void) {
 	// outside the process, will see /tmp/my_file.txt and /tmp/my_play_dir/my_file.txt
 	// but not /tmp/sandbox_tmp/my_file.txt
 	// confirm that manually
+}
+
+void allocate_large_mem(void) {
+	printf("%s", "\n============== Memory test ===============\n");
+	printf("%s\n", "Attempting to allocate large amounts of memory");
+    size_t n_blocks = 4;
+    size_t block_size = 1024*1024*4;
+    printf("I will eat memory in %zu blocks of size %zu\n", n_blocks, block_size);
+    printf("Press any key to continue\n");
+    getchar();
+    uint8_t* buf[n_blocks];
+    for (size_t i=0; i<n_blocks; i++) {
+        buf[i] = (uint8_t*) calloc(block_size, 1);
+        if (buf[i] == NULL) {
+            printf("%s\n", "Error while calling calloc");
+            perror("calloc");
+            exit(EXIT_FAILURE);
+        }
+        printf("allocated block# i=%zu, filling it with rand data now\n", i);
+        for (size_t j=0; j<block_size; j++) {
+            buf[i][j] = rand() * UINT8_MAX;
+        }
+    }
+    printf("Press any key to continue to the end\n");
+    getchar();
+    for (size_t i=0; i<n_blocks; i++) {
+        uint8_t sum = 0;
+        for (size_t j=0; j<block_size; j++) {
+            sum += buf[i][j];
+        }
+        printf("sum at index i=%zu is %hhu\n", i, sum);
+        free(buf[i]);
+    }
+    puts("releasing allocated memory\n");
 }
 
